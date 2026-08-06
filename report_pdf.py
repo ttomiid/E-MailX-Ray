@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 report_pdf.py
-Genera un informe en PDF a partir de un AnalysisResult (ver analyzer.py).
-Usa fpdf2 (pip install fpdf2), una librería pura Python liviana y fácil
-de empaquetar con PyInstaller.
+Generates a PDF report from an AnalysisResult (see analyzer.py).
+Uses fpdf2 (pip install fpdf2), a lightweight pure-Python library that
+packages cleanly with PyInstaller.
+
+Part of E-MailX-Ray.
 """
 
 import datetime
 from fpdf import FPDF
 
 RISK_COLORS_RGB = {
-    "Alto": (192, 57, 43),
-    "Medio": (230, 126, 34),
-    "Bajo": (39, 174, 96),
+    "High": (192, 57, 43),
+    "Medium": (230, 126, 34),
+    "Low": (39, 174, 96),
 }
 
 SEVERITY_COLORS_RGB = {
@@ -23,20 +25,20 @@ SEVERITY_COLORS_RGB = {
 }
 
 SEVERITY_LABELS = {
-    "high": "ALTO",
-    "medium": "MEDIO",
-    "low": "BAJO",
+    "high": "HIGH",
+    "medium": "MEDIUM",
+    "low": "LOW",
     "info": "INFO",
 }
 
-PAGE_WIDTH_USABLE = 178  # mm, con márgenes de 16mm en A4
+PAGE_WIDTH_USABLE = 178  # mm, with 16mm margins on A4
 
 
 def _safe(text: str) -> str:
     """
-    Las fuentes 'core' de PDF (Helvetica) solo soportan Latin-1. Reemplaza
-    cualquier carácter fuera de ese set (emojis, símbolos raros) en vez de
-    romper la generación del PDF.
+    Core PDF fonts (Helvetica) only support Latin-1. Replace any character
+    outside that set (emoji, unusual symbols) instead of breaking PDF
+    generation.
     """
     if text is None:
         return ""
@@ -48,47 +50,47 @@ class _ReportPDF(FPDF):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f"Página {self.page_no()}", align="C")
+        self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
 
 def generate_pdf_report(result, output_path: str, app_name: str = "E-MailX-Ray"):
     """
-    result: instancia de analyzer.AnalysisResult
-    output_path: ruta donde guardar el .pdf
+    result: instance of analyzer.AnalysisResult
+    output_path: path to save the .pdf to
     """
     pdf = _ReportPDF(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.set_margins(16, 16, 16)
     pdf.add_page()
 
-    # --- Título ---------------------------------------------------------
+    # --- Title ------------------------------------------------------------
     pdf.set_font("Helvetica", "B", 17)
     pdf.set_text_color(44, 62, 80)
-    pdf.cell(0, 9, _safe("Informe de Analisis de Cabecera de Correo"), ln=1)
+    pdf.cell(0, 9, _safe("Email Header Analysis Report"), ln=1)
 
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(120, 120, 120)
-    fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    pdf.cell(0, 6, _safe(f"Generado con {app_name} el {fecha}"), ln=1)
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    pdf.cell(0, 6, _safe(f"Generated with {app_name} on {now}"), ln=1)
     pdf.ln(4)
 
-    # --- Banda de riesgo --------------------------------------------------
+    # --- Risk banner --------------------------------------------------------
     color = RISK_COLORS_RGB.get(result.risk_level, (127, 127, 127))
     pdf.set_fill_color(*color)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(
         0, 12,
-        _safe(f"   Riesgo: {result.risk_level}    |    Puntaje: {result.score}    |    "
-              f"{len(result.findings)} hallazgo(s)"),
+        _safe(f"   Risk: {result.risk_level}    |    Score: {result.score}    |    "
+              f"{len(result.findings)} finding(s)"),
         ln=1, fill=True,
     )
     pdf.ln(6)
 
-    # --- Campos extraídos ---------------------------------------------------
+    # --- Extracted fields ---------------------------------------------------
     pdf.set_text_color(20, 20, 20)
     pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(0, 8, "Campos extraidos", ln=1)
+    pdf.cell(0, 8, "Extracted fields", ln=1)
     pdf.set_draw_color(210, 210, 210)
     pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + PAGE_WIDTH_USABLE, pdf.get_y())
     pdf.ln(3)
@@ -105,10 +107,10 @@ def generate_pdf_report(result, output_path: str, app_name: str = "E-MailX-Ray")
 
     pdf.ln(3)
 
-    # --- Hallazgos ------------------------------------------------------------
+    # --- Findings -------------------------------------------------------------
     pdf.set_font("Helvetica", "B", 13)
     pdf.set_text_color(20, 20, 20)
-    pdf.cell(0, 8, "Hallazgos de riesgo", ln=1)
+    pdf.cell(0, 8, "Risk findings", ln=1)
     pdf.set_draw_color(210, 210, 210)
     pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + PAGE_WIDTH_USABLE, pdf.get_y())
     pdf.ln(3)
