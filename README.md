@@ -46,8 +46,11 @@ pip install pyinstaller
 pyinstaller --onefile --windowed --icon=icon.ico --name "E-MailX-Ray v1.0" main.py
 ```
 
-The executable will be at `dist/EMailXRay.exe`, ready to distribute without
+The executable will be at `dist/E-MailX-Ra v1.0y.exe`, ready to distribute without
 needing Python installed on the target machine.
+
+<img width="1043" height="749" alt="image" src="https://github.com/user-attachments/assets/3bf7a144-1db4-4a7f-bd46-334b61a84cd4" />
+
 
 ## Included heuristic rules
 
