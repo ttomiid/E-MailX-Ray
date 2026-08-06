@@ -43,7 +43,7 @@ Once the app is ready, on a Windows machine (or via cross-compilation) run:
 ```bash
 pip install -r requirements.txt
 pip install pyinstaller
-pyinstaller --onefile --windowed --name EMailXRay main.py
+pyinstaller --onefile --windowed --icon=icon.ico --name "E-MailX-Ray v1.0" main.py
 ```
 
 The executable will be at `dist/EMailXRay.exe`, ready to distribute without
