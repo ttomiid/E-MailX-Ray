@@ -1,4 +1,4 @@
-# Analizador de Cabeceras de Phishing
+# E-MailX-Ray
 
 Aplicación de escritorio (Tkinter) para analizar cabeceras de email y detectar
 señales de phishing mediante reglas heurísticas, 100% offline (no consulta
