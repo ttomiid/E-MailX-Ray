@@ -6,12 +6,14 @@ Run with:  python main.py
 Package as .exe with:  pyinstaller --onefile --windowed --name EMailXRay main.py
 """
 
+import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import datetime
 
-from analyzer import analyze_headers
+from analyzer import analyze_headers, extract_body_text
 from report_pdf import generate_pdf_report
+from llm_body_analyzer import analyze_email_body, LLMNotConfigured
 
 APP_TITLE = "E-MailX-Ray"
 
@@ -26,6 +28,7 @@ SEVERITY_TAGS = {
     "medium": ("\U0001F7E0", "#e67e22"),
     "low": ("\U0001F7E1", "#b7950b"),
     "info": ("\u2139\uFE0F", "#2c3e50"),
+    "ai": ("\U0001F916", "#8e44ad"),
 }
 
 EXAMPLE_HEADER = """From: "PayPal Support" <support@paypa1-secure.com>
@@ -106,6 +109,54 @@ class EmailXRayApp(tk.Tk):
         )
         analyze_btn.pack(fill="x")
 
+        # ---- AI body analysis (optional, LangChain-powered) ----
+        self.ai_enabled = tk.BooleanVar(value=False)
+        self.ai_provider = tk.StringVar(value="ollama")
+        self.ai_model = tk.StringVar(value="llama3.2")
+        self.ai_api_key = tk.StringVar(value="")
+
+        ai_frame = tk.LabelFrame(
+            left, text="AI body analysis (optional, via LangChain)",
+            bg="#f4f6f8", font=("Segoe UI", 9, "bold"), fg="#2c3e50", padx=8, pady=6,
+        )
+        ai_frame.pack(fill="x", pady=(4, 0))
+
+        ttk.Checkbutton(
+            ai_frame, text="Also analyze the email body with an LLM",
+            variable=self.ai_enabled, command=self._toggle_ai_fields,
+        ).pack(anchor="w")
+
+        provider_row = tk.Frame(ai_frame, bg="#f4f6f8")
+        provider_row.pack(fill="x", pady=(4, 0))
+        ttk.Label(provider_row, text="Provider:", background="#f4f6f8", width=10).pack(side="left")
+        self.provider_combo = ttk.Combobox(
+            provider_row, state="disabled", width=28,
+            values=["Ollama (free, local)", "Anthropic Claude (API key)"],
+        )
+        self.provider_combo.current(0)
+        self.provider_combo.pack(side="left", fill="x", expand=True)
+        self.provider_combo.bind("<<ComboboxSelected>>", self._on_provider_change)
+
+        model_row = tk.Frame(ai_frame, bg="#f4f6f8")
+        model_row.pack(fill="x", pady=(4, 0))
+        ttk.Label(model_row, text="Model:", background="#f4f6f8", width=10).pack(side="left")
+        self.model_entry = ttk.Entry(model_row, textvariable=self.ai_model, state="disabled")
+        self.model_entry.pack(side="left", fill="x", expand=True)
+
+        key_row = tk.Frame(ai_frame, bg="#f4f6f8")
+        key_row.pack(fill="x", pady=(4, 0))
+        ttk.Label(key_row, text="API key:", background="#f4f6f8", width=10).pack(side="left")
+        self.api_key_entry = ttk.Entry(key_row, textvariable=self.ai_api_key, show="*", state="disabled")
+        self.api_key_entry.pack(side="left", fill="x", expand=True)
+
+        ttk.Label(
+            ai_frame,
+            text="Ollama: install it locally (ollama.com), free, no API key.\n"
+                 "Claude: needs an Anthropic API key (paid).",
+            background="#f4f6f8", foreground="#777", font=("Segoe UI", 8),
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
         # ---- Right: results ----
         right = tk.Frame(main_pane, bg="#f4f6f8")
         main_pane.add(right, minsize=420)
@@ -173,6 +224,23 @@ class EmailXRayApp(tk.Tk):
         self.input_text.delete("1.0", "end")
 
     # ------------------------------------------------------------------
+    def _toggle_ai_fields(self):
+        state = "readonly" if self.ai_enabled.get() else "disabled"
+        entry_state = "normal" if self.ai_enabled.get() else "disabled"
+        self.provider_combo.configure(state=state)
+        self.model_entry.configure(state=entry_state)
+        # API key field only makes sense for the Anthropic provider
+        is_anthropic = self.provider_combo.get().startswith("Anthropic")
+        self.api_key_entry.configure(state=entry_state if is_anthropic else "disabled")
+
+    def _on_provider_change(self, event=None):
+        is_anthropic = self.provider_combo.get().startswith("Anthropic")
+        self.ai_provider.set("anthropic" if is_anthropic else "ollama")
+        self.ai_model.set("claude-sonnet-5" if is_anthropic else "llama3.2")
+        if self.ai_enabled.get():
+            self.api_key_entry.configure(state="normal" if is_anthropic else "disabled")
+
+    # ------------------------------------------------------------------
     def run_analysis(self):
         raw = self.input_text.get("1.0", "end").strip()
         if not raw:
@@ -184,10 +252,71 @@ class EmailXRayApp(tk.Tk):
             messagebox.showerror("Analysis error", f"Could not analyze the header:\n{e}")
             return
 
+        if self.ai_enabled.get():
+            self._run_ai_body_analysis(raw, result)
+
         self.last_result = result
         self._render_score(result)
         self._render_fields(result)
         self._render_findings(result)
+
+    def _run_ai_body_analysis(self, raw: str, result) -> None:
+        """
+        Extracts the email body and asks the configured LLM (via LangChain)
+        to flag phishing indicators in it. Merges the result into the
+        heuristic AnalysisResult. Any failure here (Ollama not running, bad
+        API key, etc.) is shown as a warning but never blocks the
+        header-only results already computed.
+        """
+        body_text = extract_body_text(raw)
+
+        os.environ["EMAILXRAY_LLM_PROVIDER"] = self.ai_provider.get()
+        if self.ai_provider.get() == "anthropic":
+            os.environ["ANTHROPIC_API_KEY"] = self.ai_api_key.get().strip()
+            os.environ["EMAILXRAY_ANTHROPIC_MODEL"] = self.ai_model.get().strip() or "claude-sonnet-5"
+        else:
+            os.environ["EMAILXRAY_OLLAMA_MODEL"] = self.ai_model.get().strip() or "llama3.2"
+
+        try:
+            body_analysis = analyze_email_body(
+                subject=result.fields.get("Subject", ""),
+                body_text=body_text,
+                sender_display=result.fields.get("Display name", ""),
+                sender_domain=result.fields.get("From domain", ""),
+                auth_results=result.fields.get("Authentication-Results", ""),
+            )
+        except LLMNotConfigured as e:
+            messagebox.showwarning("AI analysis unavailable", str(e))
+            return
+        except Exception as e:
+            messagebox.showwarning(
+                "AI analysis failed",
+                f"Could not complete the AI body analysis:\n{e}\n\n"
+                "Continuing with header-only results.",
+            )
+            return
+
+        detail = body_analysis.summary or "The AI analysis did not report a specific reason."
+        if body_analysis.red_flags:
+            detail += "\nRed flags: " + ", ".join(body_analysis.red_flags)
+
+        # Always leave a visible trace that the AI step actually ran, even
+        # when it found nothing concerning — otherwise "no AI finding shown"
+        # is indistinguishable from "the AI step never ran at all".
+        result.add(
+            "AI body analysis flagged this email" if body_analysis.risk_contribution > 0
+            else "AI body analysis: no concerns found",
+            detail.strip(),
+            body_analysis.risk_contribution,
+            "ai",
+        )
+        # Score changed — recompute the overall risk level.
+        if result.score >= 50:
+            result.risk_level = "High"
+        elif result.score >= 20:
+            result.risk_level = "Medium"
+        else:
+            result.risk_level = "Low"
 
     # ------------------------------------------------------------------
     def _render_score(self, result):

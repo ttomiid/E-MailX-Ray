@@ -1,102 +1,162 @@
-# E-MailX-Ray
+# 🛡️ E-MailX-Ray
 
-A desktop application (Tkinter) for analyzing email headers and detecting
-phishing signals through heuristic rules — 100% offline (no external APIs
-are queried).
+**E-MailX-Ray** is a desktop tool (Tkinter GUI) that analyzes raw email headers and body content to detect phishing, spoofing, and social-engineering signals — entirely offline, no external services required. An optional module can additionally use an LLM (local via Ollama, or Claude via API) to analyze the email body for contextual red flags.
 
-## Requirements
+> ⚠️ **Defensive tool.** E-MailX-Ray does not send, receive, or modify emails. It only reads the raw text you paste or load (`.eml` / `.txt`) and reports risk indicators. It's meant to help you decide whether a suspicious email deserves further scrutiny — it does **not** guarantee an email is safe or malicious.
 
-- Python 3.9 or later (Tkinter ships with the standard Python installation
-  for Windows, so nothing extra is needed there).
-- The `fpdf2` library, for exporting reports as PDF:
+---
+
+## ✨ Features
+
+- **Paste or load** raw email source (`.eml`, `.txt`, or plain header block).
+- **31 built-in heuristic rules** covering authentication, domain spoofing, link analysis, attachment risk, and social-engineering patterns (see full list below).
+- **Risk score & level** (Low / Medium / High) computed from weighted findings.
+- **Optional AI body analysis** via [LangChain](https://python.langchain.com/), pluggable between:
+  - **Ollama** (free, local, runs entirely on your machine)
+  - **Anthropic Claude** (paid, requires an API key)
+- **Export reports** as `.txt` or a formatted `.pdf`.
+- 100% offline for the heuristic engine — no data leaves your machine unless you explicitly enable the AI body analysis.
+
+---
+
+## 📸 How it works
+
+1. Paste the raw headers (and, optionally, the full body) of a suspicious email, or load a `.eml`/`.txt` file.
+2. Click **Analyze header**. The heuristic engine parses the message and runs all detection rules.
+3. Review the **risk score**, the **extracted fields** tab, and the **risk findings** tab (each finding shows its severity, point weight, and a plain-language explanation).
+4. *(Optional)* Enable **AI body analysis** to also have an LLM inspect the email body for phishing language, credential requests, or brand impersonation that the offline heuristics might miss.
+5. Export the result as a `.txt` or `.pdf` report if you need to share or archive it.
+
+---
+
+## 🚀 Installation
 
 ```bash
-pip install -r requirements.txt
-```
-
-## How to run it
-
-```bash
+git clone https://github.com/<your-username>/E-MailX-Ray.git
+cd E-MailX-Ray
+pip install -r requirements.txt   # see "Dependencies" below
 python main.py
 ```
 
-The app window opens. You can:
-
-- **Paste** the raw header of an email (Gmail: "Show original" / Outlook:
-  "View message source") into the left-hand panel.
-- **Load a file** (`.eml`, `.txt`, etc.) with the corresponding button.
-  Supports `.txt` exports from clients like ProtonMail, even when wrapped
-  in a PGP signature block (`-----BEGIN PGP SIGNED MESSAGE-----`): the app
-  automatically strips the wrapper and uses only the headers.
-- Try the **"Example"** button to load a simulated phishing case.
-- Click **"Analyze header"** to see:
-  - The **risk score** and classification (Low / Medium / High).
-  - The **extracted fields** (From, Reply-To, Return-Path, SPF/DKIM/DMARC, etc.)
-  - The **details of each finding**, with its weight and explanation.
-- **Export the report** as a `.txt` or `.pdf` file (with formatting, colors
-  by risk level, and all findings spelled out).
-
-## How to package it as a Windows .exe
-
-Once the app is ready, on a Windows machine (or via cross-compilation) run:
+### Packaging as a standalone executable
 
 ```bash
-pip install -r requirements.txt
 pip install pyinstaller
-pyinstaller --onefile --windowed --icon=icon.ico --name "E-MailX-Ray v1.0" main.py
+pyinstaller --onefile --windowed --name EMailXRay main.py
 ```
 
-The executable will be at `dist/E-MailX-Ra v1.0y.exe`, ready to distribute without
-needing Python installed on the target machine.
+### Dependencies
 
-<img width="1043" height="749" alt="image" src="https://github.com/user-attachments/assets/3bf7a144-1db4-4a7f-bd46-334b61a84cd4" />
+| Package               | Required for                                  |
+|------------------------|------------------------------------------------|
+| `fpdf2`                 | PDF report export (`report_pdf.py`)             |
+| `langchain-core`         | AI body analysis (message formatting)           |
+| `pydantic`               | AI body analysis (structured output validation) |
+| `langchain-ollama`       | AI body analysis with a local Ollama model      |
+| `langchain-anthropic`    | AI body analysis with Claude via API            |
 
+The GUI and the full heuristic engine (`analyzer.py`) work with **zero external dependencies** beyond the Python standard library — `langchain-*` packages are only imported lazily, the moment you actually enable AI body analysis.
 
-## Included heuristic rules
+---
 
-1. Missing or failed SPF / DKIM / DMARC (`Authentication-Results`)
-2. Mismatch between `From` and `Return-Path`
-3. Mismatch between `From` and `Reply-To` (reply hijacking)
-4. `Message-ID` from a domain unrelated to the sender
-5. Known-brand impersonation in the display name
-6. Domain typosquatting (e.g. `paypa1.com` instead of `paypal.com`)
-7. High-risk TLDs (`.tk`, `.xyz`, `.top`, etc.)
-8. Excessive/obfuscated MIME encoding in headers
-9. Missing `Received` headers, or a private-range origin IP
-10. `X-Mailer` associated with bulk-sending tools
-11. Urgency/pressure language in the subject
-12. Generic or hidden recipients (`undisclosed-recipients`)
-13. The mail provider itself (Gmail, ProtonMail, Outlook) already flagged
-    the message as spam in internal headers (`X-Spam`, `X-Pm-Spam-Action`, etc.)
-14. SPF/DKIM in a "pass" state, but for a domain different from the one
-    shown in `From` (spoofing using the attacker's own infrastructure)
-15. Randomly-generated-looking subdomains, typical of spam infrastructure
-16. Sender name with a known brand obfuscated via dots/spaces
-    (e.g. `P.A.Y.P.A.L`) to evade text filters
-17. Subject with corrupted encoding / mojibake (`??????...`)
+## 🔍 Detection engine
 
-Each rule adds points to a total score:
+All heuristics live in `analyzer.py` and run completely offline. Each rule adds a **weighted score** and a **severity** (`info` / `low` / `medium` / `high`) to the result. The final verdict is:
 
-- **0–19** → Low risk
-- **20–49** → Medium risk
-- **50+** → High risk
+| Score | Risk level |
+|-------|------------|
+| ≥ 50  | 🔴 High    |
+| ≥ 20  | 🟠 Medium  |
+| < 20  | 🟡 Low     |
 
-## Project structure
+### Authentication & domain-alignment rules
+1. **SPF / DKIM / DMARC status** — flags `fail`, `softfail`, or missing records.
+2. **From vs. Return-Path mismatch** — unrelated bounce domain.
+3. **From vs. Reply-To mismatch** — replies silently redirected elsewhere.
+4. **Message-ID from an unrelated domain**.
+5. **SPF/DKIM "pass" for a domain different from the visible sender** — a valid authentication result does *not* mean the visible sender is legitimate; the attacker's own domain can pass its own checks.
+
+### Impersonation & typosquatting
+6. **Known brand mentioned in the display name but sent from an unrelated domain.**
+7. **Brand name sent from free webmail** (Gmail, Outlook, etc.).
+8. **Domain typosquatting** — text-similarity match against a curated list of commonly-impersonated brands, *now also catching character-substitution tricks* (`0`/`o`, `1`/`l`, `rn`/`m`).
+9. **High-risk TLD** (`.tk`, `.xyz`, `.click`, `.top`, etc.).
+10. **Internationalized domain names (punycode)** — detects `xn--` domains and decodes them, since IDN/homograph spoofing only becomes visible after decoding.
+11. **Homoglyph brand impersonation** — normalizes Cyrillic/Greek look-alike characters (e.g. Cyrillic "а" vs Latin "a") before comparing against known brand domains.
+
+### Header structure & anomalies
+12. **Suspicious MIME encoding** (excessive `=?...?=` blocks used to evade filters).
+13. **Empty or suspicious `Received` chain**, including private/internal-IP first hops.
+14. **Suspicious `X-Mailer`** (bulk/automated sending tools).
+15. **Generic or hidden recipient** (`undisclosed-recipients`, `user@`, etc.).
+16. **Provider already flagged it as spam** (`X-Spam-*` headers).
+17. **Randomly-generated-looking subdomains** in From / Return-Path / Message-ID — typical of auto-provisioned spam infrastructure.
+18. **Corrupted subject encoding (mojibake)**.
+19. **Duplicate critical headers** (`From`, `Reply-To`, `Return-Path`) — a technique to smuggle a different address past filters than the one shown to the user.
+20. **Conflicting `Authentication-Results`** — multiple headers with different SPF/DKIM/DMARC verdicts (only the one added by your own organization's final server should be trusted).
+21. **`Date` header anomaly** — timestamps implausibly in the future or the distant past.
+22. **Randomly-generated-looking sender mailbox** (the local-part before the `@`, not just the domain).
+23. **Unusually high number of recipients** in `To`/`Cc`.
+24. **Marketing tone from a "known brand" domain with no `List-Unsubscribe` header** (real companies almost always include it for CAN-SPAM/GDPR compliance).
+
+### Social engineering
+25. **Urgency/pressure language in the subject** (`urgent`, `account locked`, `verify your account`, etc.).
+26. **Business Email Compromise (BEC) pattern** — combines executive-sounding display names or free-webmail senders with wire-transfer/gift-card/confidentiality language in the subject or body.
+
+### Link analysis (body)
+27. **Anchor text vs. real destination mismatch** — a link that visually displays one domain but points to another.
+28. **Raw IP address as the link host**, instead of a domain name.
+29. **URL-shortening services** (bit.ly, tinyurl, t.co, etc.) that hide the real destination.
+30. **`@` obfuscation trick** in URLs (`http://real-brand.com@evil.ru/`), which browsers resolve using only the host *after* the `@`.
+31. **Link domain impersonating a known brand** — the same typosquat/homoglyph checks applied to From are also applied to every link found in the body.
+
+### Attachment analysis
+32. **Dangerous attachment extensions** (`.exe`, `.js`, `.vbs`, `.hta`, `.iso`, `.lnk`, etc.).
+33. **Disguised double-extension attachments** (e.g. `invoice.pdf.exe`), a classic trick that relies on hidden file extensions in the OS file explorer.
+
+> Some rules are conditioned on others (e.g. link/attachment analysis only runs when the body/attachments are present), so the exact count of findings varies by input.
+
+---
+
+## 🤖 Optional AI body analysis
+
+The heuristic engine only sees **headers and structural body signals** (links, attachments, MIME structure). The optional AI module (`llm_body_analyzer.py`) reads the actual **text of the email body** and asks an LLM to flag concrete phishing indicators the rules above can't reason about — tone, context, and language nuance.
+
+- Configure the **provider** (`ollama` or `anthropic`), **model**, and (for Anthropic) your **API key** directly in the GUI.
+- The AI step is **isolated**: if it fails (Ollama not running, invalid API key, network error) the header-only heuristic results are still shown — nothing blocks on it.
+- The AI's contribution is capped at **0–40 points** and merged into the same score/finding system as the heuristic rules, so it never dominates the verdict.
+
+---
+
+## 🗂️ Project structure
 
 ```
-emailxray/
-├── analyzer.py       # Analysis engine and heuristics (no UI dependencies)
-├── report_pdf.py     # PDF report generation
-├── main.py            # Tkinter graphical interface
-├── requirements.txt  # Dependencies (fpdf2)
+E-MailX-Ray/
+├── main.py                # Tkinter GUI, wires everything together
+├── analyzer.py             # Offline heuristic detection engine (header parsing + 30+ rules)
+├── llm_body_analyzer.py     # Optional LLM-based body analysis (LangChain, Ollama/Claude)
+├── report_pdf.py            # PDF report generation (fpdf2)
 └── README.md
 ```
 
-## Possible future improvements
+---
 
-- Query IP/domain reputation against public blocklists (VirusTotal,
-  AbuseIPDB) — would require an API key and an internet connection.
-- Live DNS resolution to validate SPF/DKIM for domains missing
-  `Authentication-Results`.
-- Also analyze the email body (URLs, attachments), not just the headers.
-- Keep an analysis history in a local database (SQLite).
+## ⚠️ Limitations & disclaimer
+
+- This tool performs **heuristic** analysis. A low score does **not** guarantee an email is safe, and a high score does not guarantee malicious intent — always apply human judgment for anything involving credentials, payments, or sensitive actions.
+- The heuristic rules rely on curated lists (`KNOWN_BRANDS`, `SUSPICIOUS_TLDS`, `URL_SHORTENERS`, etc.) that need periodic updates to stay effective against new campaigns.
+- The AI body analysis sends the email body text to the selected provider (locally with Ollama, or to Anthropic's API if you choose Claude) — review your organization's data-handling policies before enabling it on sensitive mail.
+- Encrypted (PGP) bodies cannot be analyzed without the corresponding private key; the tool detects and skips them gracefully instead of failing.
+
+---
+
+## 🤝 Contributing
+
+Pull requests are welcome — especially for:
+- Additional/updated brand and TLD reference lists.
+- New heuristic rules (open an issue describing the phishing pattern and a sample header/body first).
+- Internationalization of the GUI and findings text.
+
+## 📄 License
+
+Add your preferred license here (e.g. MIT) before publishing the repository.

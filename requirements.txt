@@ -1,1 +1,15 @@
-fpdf2>=2.7
+# Core heuristic engine (analyzer.py) and GUI (main.py) use only the
+# Python standard library (tkinter, email, re, difflib, etc.) — no
+# dependencies required to run header-only analysis.
+
+# PDF report export (report_pdf.py)
+fpdf2>=2.7.0
+
+# Optional AI body analysis (llm_body_analyzer.py) — only needed if you
+# enable "AI body analysis" in the GUI.
+langchain-core>=0.2.0
+pydantic>=2.0.0
+
+# Pick the provider(s) you plan to use for AI body analysis:
+langchain-ollama>=0.1.0      # local, free (requires Ollama installed separately: https://ollama.com)
+langchain-anthropic>=0.1.0    # Claude via Anthropic API (requires an API key, paid)

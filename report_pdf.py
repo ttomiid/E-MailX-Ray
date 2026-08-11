@@ -22,6 +22,7 @@ SEVERITY_COLORS_RGB = {
     "medium": (230, 126, 34),
     "low": (154, 124, 12),
     "info": (44, 62, 80),
+    "ai": (142, 68, 173),
 }
 
 SEVERITY_LABELS = {
@@ -29,6 +30,7 @@ SEVERITY_LABELS = {
     "medium": "MEDIUM",
     "low": "LOW",
     "info": "INFO",
+    "ai": "AI",
 }
 
 PAGE_WIDTH_USABLE = 178  # mm, with 16mm margins on A4
