@@ -162,4 +162,4 @@ Pull requests are welcome — especially for:
 
 ## 📄 License
 
-Add your preferred license here (e.g. MIT) before publishing the repository.
+GPL-3.0 License
