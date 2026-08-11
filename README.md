@@ -129,6 +129,9 @@ The heuristic engine only sees **headers and structural body signals** (links, a
 - The AI step is **isolated**: if it fails (Ollama not running, invalid API key, network error) the header-only heuristic results are still shown — nothing blocks on it.
 - The AI's contribution is capped at **0–40 points** and merged into the same score/finding system as the heuristic rules, so it never dominates the verdict.
 
+<img width="1044" height="748" alt="image" src="https://github.com/user-attachments/assets/a518c9ba-7a0f-406d-aa4d-9cf08dc83393" />
+
+
 ---
 
 ## 🗂️ Project structure
@@ -141,6 +144,7 @@ E-MailX-Ray/
 ├── report_pdf.py            # PDF report generation (fpdf2)
 └── README.md
 ```
+
 
 ---
 
