@@ -1,5 +1,8 @@
 # 🛡️ E-MailX-Ray
 
+<img width="1536" height="1024" alt="email_xray_eng" src="https://github.com/user-attachments/assets/a34cbbbf-0b45-473d-bc99-9c62e11d3e18" />
+
+
 **E-MailX-Ray** is a desktop tool (Tkinter GUI) that analyzes raw email headers and body content to detect phishing, spoofing, and social-engineering signals — entirely offline, no external services required. An optional module can additionally use an LLM (local via Ollama, or Claude via API) to analyze the email body for contextual red flags.
 
 > ⚠️ **Defensive tool.** E-MailX-Ray does not send, receive, or modify emails. It only reads the raw text you paste or load (`.eml` / `.txt`) and reports risk indicators. It's meant to help you decide whether a suspicious email deserves further scrutiny — it does **not** guarantee an email is safe or malicious.
