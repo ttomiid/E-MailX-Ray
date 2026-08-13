@@ -29,10 +29,21 @@ from langchain_core.messages import SystemMessage, HumanMessage
 MAX_BODY_CHARS = 3500  # keep prompts small & cheap; also leaves more room for the reply
 
 SYSTEM_PROMPT = """You are a cybersecurity assistant specialized in phishing detection.
-You will be shown the body of an email, plus the sender's domain and whether
-its authentication (SPF/DKIM) already passed.
+You will be shown the body of an email, the sender's domain, its SPF/DKIM/DMARC
+authentication status, AND a list of issues already found by a separate,
+deterministic header-analysis engine (domain mismatches, brand impersonation,
+SPF misalignment, etc.).
 
-Decide whether the BODY shows CONCRETE signs of phishing or social engineering.
+IMPORTANT: if the header analysis already flagged issues like brand
+impersonation or a domain mismatch, treat that as established fact, not a
+guess. Your job is then to check whether the BODY's content is CONSISTENT
+with that finding (e.g. does the body mention or impersonate the brand named
+in the header finding? does it push the recipient toward a link or action
+that matches a scam?). If so, corroborate it explicitly and raise
+risk_contribution accordingly — do not judge the body in isolation as if the
+header findings didn't exist.
+
+If the header analysis found nothing, then judge the body on its own merits.
 Only count something as a red flag if it is specific and well-founded, e.g.:
   - A link whose visible text or destination domain does NOT match the
     sender's actual domain.
@@ -43,11 +54,11 @@ Only count something as a red flag if it is specific and well-founded, e.g.:
 
 Do NOT flag an email just because it has a generic greeting, a marketing
 tone, a call-to-action button, or a link — these are completely normal in
-legitimate transactional and notification emails from real companies
-(shipping updates, event registrations, newsletters, etc.). If the sender's
-domain is a well-known, authenticated company domain and you don't have a
-concrete reason from the list above, keep risk_contribution low (0-10) even
-if the email is promotional or impersonal in tone.
+legitimate transactional and notification emails from real companies. But if
+the header analysis already established the sender is impersonating a brand
+or the domain doesn't align, a promotional/friendly tone in the body is NOT
+a reason to call it legitimate — that friendly tone is exactly how phishing
+disguises itself.
 
 Keep your answer SHORT: at most 3 red flags, and a summary of no more than 2
 sentences. Only list a red flag if you can point to the specific text or
@@ -62,8 +73,6 @@ exactly this shape:
   "red_flags": ["short phrase", "short phrase"],
   "summary": "1-2 sentence explanation of your verdict, in the same language as the email body"
 }
-
-(In English, please)
 """
 
 
@@ -171,6 +180,7 @@ def analyze_email_body(
     sender_display: str,
     sender_domain: str = "",
     auth_results: str = "",
+    heuristic_context: str = "",
     llm=None,
 ) -> BodyAnalysis:
     """
@@ -178,6 +188,13 @@ def analyze_email_body(
     provider-specific connection error if the call fails — the caller
     (the GUI) is expected to catch that and degrade gracefully to the
     heuristic-only result.
+
+    heuristic_context: a short summary of what the deterministic header
+    rules already found (e.g. "Possible brand impersonation; SPF passes for
+    a different domain than the sender"). Small local models are much more
+    reliable at CONFIRMING or CONTRADICTING a specific lead than at spotting
+    subtle cross-lingual social engineering purely from raw text — so we
+    hand them the leads instead of asking them to find everything alone.
     """
     if not body_text or not body_text.strip():
         return BodyAnalysis(
@@ -194,7 +211,9 @@ def analyze_email_body(
         f"Sender display name: {sender_display or '(unknown)'}\n"
         f"Sender domain: {sender_domain or '(unknown)'}\n"
         f"Authentication-Results (SPF/DKIM/DMARC): {auth_results or '(not present)'}\n"
-        f"Subject: {subject or '(no subject)'}\n\n"
+        f"Subject: {subject or '(no subject)'}\n"
+        f"Issues ALREADY found by header analysis (weigh these heavily — they are "
+        f"deterministic facts, not guesses): {heuristic_context or '(none found)'}\n\n"
         f"Email body:\n---\n{truncated_body}\n---\n"
     )
 

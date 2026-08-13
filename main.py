@@ -13,9 +13,10 @@ import datetime
 
 from analyzer import analyze_headers, extract_body_text
 from report_pdf import generate_pdf_report
+from report_docx import generate_docx_report
 from llm_body_analyzer import analyze_email_body, LLMNotConfigured
 
-APP_TITLE = "E-MailX-Ray"
+APP_TITLE = "E-MailX-Ray v1.2"
 
 RISK_COLORS = {
     "High": "#c0392b",
@@ -49,7 +50,7 @@ class EmailXRayApp(tk.Tk):
         super().__init__()
         self.title(APP_TITLE)
         self.geometry("1050x720")
-        self.minsize(900, 600)
+        self.minsize(1280, 600)
         self.configure(bg="#f4f6f8")
 
         self._build_style()
@@ -188,12 +189,32 @@ class EmailXRayApp(tk.Tk):
         )
         self.findings_text.pack(fill="both", expand=True, padx=6, pady=6)
 
+        # Report type selector — controls the .pdf and .docx exports below.
+        # "Technical" = full detail (fields + every finding) for analysts/IT.
+        # "Executive" = short, jargon-free verdict + recommendation for managers.
+        report_type_row = tk.Frame(right, bg="#f4f6f8")
+        report_type_row.pack(fill="x", pady=(8, 4))
+        ttk.Label(report_type_row, text="Report type:", background="#f4f6f8").pack(side="left")
+        self.report_type = tk.StringVar(value="Technical")
+        self.report_type_combo = ttk.Combobox(
+            report_type_row, textvariable=self.report_type, state="readonly",
+            values=["Technical", "Executive"], width=14,
+        )
+        self.report_type_combo.pack(side="left", padx=(6, 0))
+        ttk.Label(
+            report_type_row,
+            text="Technical: full detail for analysts.  Executive: verdict + recommendation for managers.",
+            background="#f4f6f8", foreground="#777", font=("Segoe UI", 8),
+        ).pack(side="left", padx=(10, 0))
+
         export_row = tk.Frame(right, bg="#f4f6f8")
-        export_row.pack(fill="x", pady=(8, 0))
+        export_row.pack(fill="x", pady=(4, 0))
+        ttk.Button(export_row, text="\U0001F4D1 Export .docx", command=self.export_report_docx).pack(side="right", padx=(6, 0))
         ttk.Button(export_row, text="\U0001F4C4 Export .pdf", command=self.export_report_pdf).pack(side="right", padx=(6, 0))
         ttk.Button(export_row, text="\U0001F4BE Export .txt", command=self.export_report_txt).pack(side="right")
 
         self.last_result = None
+        self.last_raw_header = None
 
     # ------------------------------------------------------------------
     def load_eml(self):
@@ -256,6 +277,7 @@ class EmailXRayApp(tk.Tk):
             self._run_ai_body_analysis(raw, result)
 
         self.last_result = result
+        self.last_raw_header = raw
         self._render_score(result)
         self._render_fields(result)
         self._render_findings(result)
@@ -277,6 +299,12 @@ class EmailXRayApp(tk.Tk):
         else:
             os.environ["EMAILXRAY_OLLAMA_MODEL"] = self.ai_model.get().strip() or "llama3.2"
 
+        # Give the LLM the leads the deterministic engine already found,
+        # instead of asking it to spot everything from raw text alone.
+        heuristic_context = "; ".join(
+            f.rule for f in result.findings if f.severity in ("high", "medium")
+        )
+
         try:
             body_analysis = analyze_email_body(
                 subject=result.fields.get("Subject", ""),
@@ -284,6 +312,7 @@ class EmailXRayApp(tk.Tk):
                 sender_display=result.fields.get("Display name", ""),
                 sender_domain=result.fields.get("From domain", ""),
                 auth_results=result.fields.get("Authentication-Results", ""),
+                heuristic_context=heuristic_context,
             )
         except LLMNotConfigured as e:
             messagebox.showwarning("AI analysis unavailable", str(e))
@@ -391,23 +420,56 @@ class EmailXRayApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Error", f"Could not save the report:\n{e}")
 
+    def _selected_report_type(self) -> str:
+        """Maps the GUI combobox ('Technical'/'Executive') to the exporter's
+        report_type argument ('technical'/'executive')."""
+        return "executive" if self.report_type.get() == "Executive" else "technical"
+
     def export_report_pdf(self):
         if not self.last_result:
             messagebox.showwarning("Notice", "Analyze a header first.")
             return
+        report_type = self._selected_report_type()
         path = filedialog.asksaveasfilename(
             title="Save report as PDF",
             defaultextension=".pdf",
             filetypes=[("PDF document", "*.pdf")],
-            initialfile=f"phishing_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            initialfile=f"phishing_report_{report_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
         )
         if not path:
             return
         try:
-            generate_pdf_report(self.last_result, path)
+            generate_pdf_report(
+                self.last_result, path,
+                report_type=report_type,
+                raw_header=self.last_raw_header,
+            )
             messagebox.showinfo("Done", f"PDF report saved to:\n{path}")
         except Exception as e:
             messagebox.showerror("Error", f"Could not generate the PDF:\n{e}")
+
+    def export_report_docx(self):
+        if not self.last_result:
+            messagebox.showwarning("Notice", "Analyze a header first.")
+            return
+        report_type = self._selected_report_type()
+        path = filedialog.asksaveasfilename(
+            title="Save report as Word document",
+            defaultextension=".docx",
+            filetypes=[("Word document", "*.docx")],
+            initialfile=f"phishing_report_{report_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.docx",
+        )
+        if not path:
+            return
+        try:
+            generate_docx_report(
+                self.last_result, path,
+                report_type=report_type,
+                raw_header=self.last_raw_header,
+            )
+            messagebox.showinfo("Done", f"Word report saved to:\n{path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not generate the Word document:\n{e}")
 
 
 if __name__ == "__main__":
