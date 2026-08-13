@@ -134,6 +134,7 @@ The heuristic engine only sees **headers and structural body signals** (links, a
 
 ---
 
+## Report Executive/Technical
 
 The app window opens. You can:
 
