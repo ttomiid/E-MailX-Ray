@@ -134,6 +134,35 @@ The heuristic engine only sees **headers and structural body signals** (links, a
 
 ---
 
+
+The app window opens. You can:
+
+- **Paste** the raw header of an email (Gmail: "Show original" / Outlook:
+  "View message source") into the left-hand panel.
+- **Load a file** (`.eml`, `.txt`, etc.) with the corresponding button.
+  Supports `.txt` exports from clients like ProtonMail, even when wrapped
+  in a PGP signature block (`-----BEGIN PGP SIGNED MESSAGE-----`): the app
+  automatically strips the wrapper and uses only the headers.
+- Try the **"Example"** button to load a simulated phishing case.
+- Click **"Analyze header"** to see:
+  - The **risk score** and classification (Low / Medium / High).
+  - The **extracted fields** (From, Reply-To, Return-Path, SPF/DKIM/DMARC, etc.)
+  - The **details of each finding**, with its weight and explanation.
+- **Export the report** as `.txt`, `.pdf`, or `.docx` (Word), in either of
+  two flavors picked from the **"Report type"** dropdown:
+  - **Technical** — every extracted field and every finding with its
+    weight/severity, plus an optional appendix with the raw header
+    analyzed. For security analysts / IT.
+  - **Executive** — a one-page, jargon-free verdict, a recommended action,
+    and only the handful of findings that matter. For managers and other
+    non-technical stakeholders.
+  Both formats are generated from the same underlying data
+  (`report_common.py`), so the PDF and Word versions of a given report
+  type always say the same thing.
+- Optionally, **enable "Also analyze the email body with an LLM"** to also
+  scan the actual message content (not just headers) for phishing signals.
+  See [AI body analysis](#ai-body-analysis-optional) below.
+
 ## 🗂️ Project structure
 
 ```
